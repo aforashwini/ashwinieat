@@ -1,0 +1,649 @@
+/* ===========================================================================
+   Ashwinieat — pixel design system
+   Classic 4-shade green LCD, Press Start 2P, chunky pixels, no anti-aliasing.
+   =========================================================================== */
+
+:root {
+  /* Palette (classic 4-shade green LCD) */
+  --lcd-bg: #9bbc0f; /* screen background, lightest green */
+  --lcd-light: #8bac0f; /* secondary light green */
+  --lcd-mid: #306230; /* mid green, for fills and shadows */
+  --lcd-dark: #0f380f; /* darkest, for text and outlines */
+  --lcd-frame: #1a1a1a; /* the phone bezel around the screen */
+  --lcd-frame-edge: #2e2e2e; /* a touch lighter, for bezel highlights */
+
+  --font-pixel: "Press Start 2P", "Courier New", monospace;
+
+  /* Pixel grid unit. Keep spacing on multiples of this so things stay blocky. */
+  --px: 4px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-pixel);
+  background: #0c0c0c;
+  color: var(--lcd-dark);
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+  /* faint vignette behind the handheld */
+  background-image: radial-gradient(circle at 50% 35%, #1c1c1c 0%, #0a0a0a 70%);
+  overflow: hidden;
+}
+
+img,
+canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* ---- App shell: center the handheld in the viewport ---------------------- */
+
+.app-shell {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  overflow: hidden;
+}
+
+/* ---- The handheld bezel -------------------------------------------------- */
+
+.handheld {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  background: var(--lcd-frame);
+  border-radius: 26px 26px 40px 40px;
+  padding: 18px 18px 40px;
+  box-shadow:
+    inset 0 2px 0 var(--lcd-frame-edge),
+    inset 0 -6px 12px rgba(0, 0, 0, 0.6),
+    0 18px 40px rgba(0, 0, 0, 0.7);
+  border: 2px solid #000;
+  display: flex;
+  flex-direction: column;
+  /* fit within the viewport height on phones */
+  max-height: 100%;
+}
+
+/* little speaker grill / brand line above the screen */
+.handheld__brand {
+  text-align: center;
+  font-size: 7px;
+  letter-spacing: 2px;
+  color: #5a5a5a;
+  margin: 0 0 8px;
+  user-select: none;
+}
+
+/* ---- The green LCD screen ------------------------------------------------ */
+
+.screen {
+  position: relative;
+  background: var(--lcd-bg);
+  border: 3px solid #000;
+  border-radius: 6px;
+  padding: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow:
+    inset 0 0 0 2px var(--lcd-light),
+    inset 0 0 18px rgba(15, 56, 15, 0.35);
+  min-height: 0;
+}
+
+/* optional very faint scanline shimmer overlay */
+.screen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(15, 56, 15, 0.06) 0px,
+    rgba(15, 56, 15, 0.06) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  z-index: 50;
+  mix-blend-mode: multiply;
+  opacity: 0.5;
+}
+
+/* ---- Status bar (top of screen) ----------------------------------------- */
+
+.statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border-bottom: 2px solid var(--lcd-dark);
+  font-size: 8px;
+  letter-spacing: 1px;
+  color: var(--lcd-dark);
+  background: var(--lcd-bg);
+  flex: 0 0 auto;
+  z-index: 2;
+}
+
+.statusbar__left,
+.statusbar__right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.statusbar__plant {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ---- Screen body (scrollable content area) ------------------------------ */
+
+.screen__body {
+  position: relative;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 14px 12px 16px;
+  display: flex;
+  flex-direction: column;
+  z-index: 1;
+  /* thin retro scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: var(--lcd-mid) transparent;
+}
+.screen__body::-webkit-scrollbar {
+  width: 6px;
+}
+.screen__body::-webkit-scrollbar-thumb {
+  background: var(--lcd-mid);
+}
+
+/* ---- Typography helpers -------------------------------------------------- */
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+.title-lg {
+  font-size: 16px;
+  line-height: 1.6;
+  letter-spacing: 1px;
+  color: var(--lcd-dark);
+}
+
+.title-md {
+  font-size: 12px;
+  line-height: 1.7;
+  letter-spacing: 1px;
+  color: var(--lcd-dark);
+}
+
+.text {
+  font-size: 10px;
+  line-height: 1.8;
+  letter-spacing: 0.5px;
+  color: var(--lcd-dark);
+}
+
+.text-sm {
+  font-size: 8px;
+  line-height: 1.9;
+  letter-spacing: 0.5px;
+  color: var(--lcd-mid);
+}
+
+.text-center {
+  text-align: center;
+}
+
+.muted {
+  color: var(--lcd-mid);
+}
+
+.blink {
+  animation: blink 1.1s steps(1) infinite;
+}
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* ---- Layout helpers ------------------------------------------------------ */
+
+.stack {
+  display: flex;
+  flex-direction: column;
+}
+.stack-2 > * + * {
+  margin-top: 8px;
+}
+.stack-3 > * + * {
+  margin-top: 12px;
+}
+.stack-4 > * + * {
+  margin-top: 16px;
+}
+.row {
+  display: flex;
+  align-items: center;
+}
+.gap-2 {
+  gap: 8px;
+}
+.gap-3 {
+  gap: 12px;
+}
+.grow {
+  flex: 1 1 auto;
+}
+.spacer {
+  flex: 1 1 auto;
+}
+
+/* ---- Pixel button -------------------------------------------------------- */
+
+.pixel-btn {
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  letter-spacing: 1px;
+  line-height: 1.4;
+  color: var(--lcd-dark);
+  background: var(--lcd-bg);
+  border: 3px solid var(--lcd-dark);
+  border-radius: 2px;
+  padding: 10px 12px;
+  cursor: pointer;
+  text-transform: lowercase;
+  box-shadow: 3px 3px 0 var(--lcd-dark);
+  transition: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.pixel-btn:hover {
+  background: var(--lcd-light);
+}
+
+/* pressed state inverts colors */
+.pixel-btn:active,
+.pixel-btn.is-pressed {
+  background: var(--lcd-dark);
+  color: var(--lcd-bg);
+  box-shadow: 0 0 0 var(--lcd-dark);
+  transform: translate(3px, 3px);
+}
+
+.pixel-btn--primary {
+  font-size: 12px;
+  padding: 14px 12px;
+  background: var(--lcd-mid);
+  color: var(--lcd-bg);
+}
+.pixel-btn--primary:hover {
+  background: var(--lcd-dark);
+}
+.pixel-btn--primary:active,
+.pixel-btn--primary.is-pressed {
+  background: var(--lcd-dark);
+  color: var(--lcd-bg);
+}
+
+.pixel-btn--small {
+  font-size: 8px;
+  padding: 6px 8px;
+  box-shadow: 2px 2px 0 var(--lcd-dark);
+}
+.pixel-btn--small:active {
+  transform: translate(2px, 2px);
+}
+
+.pixel-btn--ghost {
+  background: transparent;
+  border-width: 2px;
+  box-shadow: none;
+}
+.pixel-btn--ghost:hover {
+  background: var(--lcd-light);
+}
+.pixel-btn--ghost:active {
+  transform: translate(2px, 2px);
+}
+
+.pixel-btn--block {
+  display: block;
+  width: 100%;
+  text-align: center;
+}
+
+.pixel-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+/* a tiny icon-only square button */
+.icon-btn {
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  color: var(--lcd-dark);
+  background: var(--lcd-bg);
+  border: 2px solid var(--lcd-dark);
+  border-radius: 2px;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.icon-btn:active {
+  background: var(--lcd-dark);
+  color: var(--lcd-bg);
+}
+
+/* ---- Pixel inputs -------------------------------------------------------- */
+
+.pixel-input {
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  color: var(--lcd-dark);
+  background: var(--lcd-bg);
+  border: 2px solid var(--lcd-dark);
+  border-radius: 2px;
+  padding: 8px 6px;
+  width: 100%;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.pixel-input::placeholder {
+  color: var(--lcd-mid);
+  opacity: 0.7;
+}
+.pixel-input:focus {
+  background: var(--lcd-light);
+  box-shadow: inset 0 0 0 2px var(--lcd-mid);
+}
+
+/* ---- Progress bar -------------------------------------------------------- */
+
+.pbar {
+  position: relative;
+  height: 16px;
+  border: 2px solid var(--lcd-dark);
+  background: var(--lcd-bg);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.pbar__fill {
+  height: 100%;
+  background: var(--lcd-dark);
+  /* chunky segmented fill */
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--lcd-dark) 0,
+    var(--lcd-dark) 6px,
+    var(--lcd-mid) 6px,
+    var(--lcd-mid) 8px
+  );
+  transition: width 0.4s steps(12);
+}
+
+/* ---- Cards / panels ------------------------------------------------------ */
+
+.panel {
+  border: 2px solid var(--lcd-dark);
+  border-radius: 2px;
+  padding: 10px;
+  background: var(--lcd-bg);
+}
+.panel--inset {
+  box-shadow: inset 2px 2px 0 rgba(15, 56, 15, 0.18);
+}
+
+/* ---- Checklist row ------------------------------------------------------- */
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 9px;
+  line-height: 1.5;
+  cursor: pointer;
+  padding: 4px 0;
+  user-select: none;
+}
+.check-box {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--lcd-dark);
+  background: var(--lcd-bg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--lcd-dark);
+}
+.check-box.is-on {
+  background: var(--lcd-dark);
+  color: var(--lcd-bg);
+}
+
+/* ---- Category result row ------------------------------------------------- */
+
+.cat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 9px;
+}
+.cat-row__name {
+  flex: 1 1 auto;
+}
+.cat-row__pips {
+  display: inline-flex;
+  gap: 3px;
+}
+.pip {
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--lcd-dark);
+  background: transparent;
+}
+.pip.is-filled {
+  background: var(--lcd-dark);
+}
+.pip.is-bonus {
+  background: var(--lcd-mid);
+  border-color: var(--lcd-mid);
+}
+
+/* ---- Weekly heatmap ------------------------------------------------------ */
+
+.heatmap {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+.heat-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.heat-cell {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border: 2px solid var(--lcd-dark);
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  cursor: pointer;
+}
+.heat-0 {
+  background: var(--lcd-bg);
+}
+.heat-1 {
+  background: var(--lcd-light);
+}
+.heat-2 {
+  background: var(--lcd-mid);
+  color: var(--lcd-bg);
+}
+.heat-3 {
+  background: var(--lcd-dark);
+  color: var(--lcd-bg);
+}
+.heat-label {
+  font-size: 7px;
+  color: var(--lcd-mid);
+}
+
+/* ---- Canvas wrapper ------------------------------------------------------ */
+
+.game-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--lcd-bg);
+  border: 2px solid var(--lcd-dark);
+  border-radius: 2px;
+  image-rendering: pixelated;
+}
+
+/* ---- Log entry rows ------------------------------------------------------ */
+
+.log-row {
+  display: grid;
+  grid-template-columns: 1fr 88px 26px;
+  gap: 6px;
+  align-items: center;
+}
+.log-head {
+  display: grid;
+  grid-template-columns: 1fr 88px 26px;
+  gap: 6px;
+  font-size: 8px;
+  color: var(--lcd-mid);
+  letter-spacing: 1px;
+  padding: 0 2px;
+}
+.log-hint {
+  font-size: 7px;
+  color: var(--lcd-mid);
+  min-height: 9px;
+  padding-left: 2px;
+}
+
+/* ---- Toast / quiet warning ---------------------------------------------- */
+
+.toast {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  background: var(--lcd-dark);
+  color: var(--lcd-bg);
+  border: 2px solid var(--lcd-bg);
+  font-size: 8px;
+  line-height: 1.6;
+  padding: 8px;
+  z-index: 60;
+  border-radius: 2px;
+}
+
+/* ---- PixelGirl sprite wrapper ------------------------------------------- */
+
+.pixel-girl {
+  image-rendering: pixelated;
+}
+.pixel-girl--bob {
+  animation: bob 0.9s steps(2) infinite alternate;
+}
+@keyframes bob {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-4px);
+  }
+}
+
+/* ---- Category-picker modal (unknown food) -------------------------------- */
+
+.modal-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 56, 15, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 70;
+}
+.modal {
+  background: var(--lcd-bg);
+  border: 3px solid var(--lcd-dark);
+  border-radius: 2px;
+  padding: 12px;
+  width: 100%;
+  max-width: 280px;
+  box-shadow: 4px 4px 0 var(--lcd-dark);
+}
+.cat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+/* ---- Misc ---------------------------------------------------------------- */
+
+.divider {
+  border: none;
+  border-top: 2px dashed var(--lcd-mid);
+  margin: 4px 0;
+}
+
+.tag {
+  display: inline-block;
+  font-size: 7px;
+  border: 1px solid var(--lcd-dark);
+  padding: 2px 4px;
+  border-radius: 2px;
+  color: var(--lcd-dark);
+}
+
+a.link {
+  color: var(--lcd-dark);
+  text-decoration: underline;
+  cursor: pointer;
+}
