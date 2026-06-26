@@ -19,7 +19,7 @@ export default function Screen({
   return (
     <div className="app-shell">
       <div className="handheld">
-        <p className="handheld__brand">ASHWINIEAT&nbsp;·&nbsp;handheld</p>
+        <p className="handheld__brand">YUMSHI&nbsp;·&nbsp;handheld</p>
         <div className="screen">
           <div className="statusbar">
             <div className="statusbar__left">

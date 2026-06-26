@@ -1,4 +1,7 @@
-# Ashwinieat 🌱🎮
+# Yumshi 🌱🎮
+
+> Repo/paths are still named `ashwinieat` (GitHub Pages serves it at
+> `/ashwinieat/`); **Yumshi** is just the display name players see.
 
 A single-page **retro pixel nutrition game**. Log what you ate, and a Nokia-green
 pixel girl munches her way Snake-style through everything you hit against a
@@ -10,16 +13,18 @@ little silly ("nom noms", "great munching today!").
 
 ## Stack
 
-- **React + Vite + TypeScript** — no backend, no UI libraries.
+- **React + Vite + TypeScript** — no UI libraries.
+- **Supabase** for auth (Google sign-in) + cloud sync, so logs follow you across
+  devices. Row Level Security keeps each user to their own rows. See
+  [`SUPABASE_SETUP.md`](./SUPABASE_SETUP.md) for the one-time SQL.
 - **HTML `<canvas>`** for the Snake-style daily game (hand-drawn pixel sprites via `fillRect`).
-- **localStorage** for persistence (with an in-memory fallback if storage is blocked).
 - **Press Start 2P** font + a classic 4-shade green LCD palette.
 
 ## Getting started
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
+npm run dev      # http://localhost:3000/ashwinieat/
 npm run build    # type-check + production build into dist/
 npm run preview  # preview the production build
 ```
@@ -49,7 +54,9 @@ src/
     targets.ts             # Daily-Dozen-based targets + serving/unit definitions
     foodDatabase.ts        # ~100 foods -> {category, serving, kcal, plant}
   lib/
-    storage.ts             # localStorage blob + in-memory fallback
+    storage.ts             # app data shapes + helpers
+    supabase.ts            # Supabase client + Google auth helpers
+    store.ts               # fetch/save the user's data (JSONB) via Supabase
     nutrition.ts           # quantity parsing + day/week progress engine
     sprites.ts             # pixel matrices + canvas draw helpers
     dates.ts               # local-date helpers

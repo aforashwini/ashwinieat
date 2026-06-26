@@ -1,6 +1,6 @@
 // lib/storage.ts
-// Single localStorage blob under one key, with a graceful in-memory fallback
-// for environments where storage is unavailable (private mode, etc).
+// Data shapes + small helpers shared across the app. Persistence itself now
+// lives in lib/store.ts (Supabase). This file is storage-mechanism agnostic.
 
 import type { Category } from "../data/targets";
 import { DEFAULT_SETTINGS } from "../data/targets";
@@ -49,62 +49,25 @@ export interface AppData {
   learned: LearnedFood[];
 }
 
-const KEY = "ashwinieat:data";
-
-const EMPTY_DATA: AppData = {
+export const EMPTY_DATA: AppData = {
   settings: { ...DEFAULT_SETTINGS },
   days: {},
   learned: [],
 };
 
-// in-memory fallback if localStorage throws
-let memoryFallback: AppData | null = null;
-let storageBroken = false;
-
-export function isStorageBroken(): boolean {
-  return storageBroken;
-}
-
-function safeParse(raw: string | null): AppData {
-  if (!raw) return structuredCloneSafe(EMPTY_DATA);
-  try {
-    const parsed = JSON.parse(raw) as Partial<AppData>;
-    return {
-      settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) },
-      days: parsed.days ?? {},
-      learned: parsed.learned ?? [],
-    };
-  } catch {
-    return structuredCloneSafe(EMPTY_DATA);
-  }
-}
-
-function structuredCloneSafe<T>(obj: T): T {
+export function cloneData<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj)) as T;
 }
 
-export function loadData(): AppData {
-  if (storageBroken && memoryFallback) return memoryFallback;
-  try {
-    const raw = localStorage.getItem(KEY);
-    const data = safeParse(raw);
-    memoryFallback = data;
-    return data;
-  } catch {
-    storageBroken = true;
-    if (!memoryFallback) memoryFallback = structuredCloneSafe(EMPTY_DATA);
-    return memoryFallback;
-  }
-}
-
-export function saveData(data: AppData): void {
-  memoryFallback = data;
-  try {
-    localStorage.setItem(KEY, JSON.stringify(data));
-  } catch {
-    storageBroken = true;
-    // keep working from memory for the session
-  }
+// Normalize a (possibly partial / old) blob into a complete AppData, filling
+// in any missing settings with defaults.
+export function normalizeData(parsed: Partial<AppData> | null | undefined): AppData {
+  if (!parsed) return cloneData(EMPTY_DATA);
+  return {
+    settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) },
+    days: parsed.days ?? {},
+    learned: parsed.learned ?? [],
+  };
 }
 
 // ---- Convenience helpers --------------------------------------------------

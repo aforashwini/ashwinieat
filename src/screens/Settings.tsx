@@ -7,6 +7,8 @@ import PixelButton from "../components/PixelButton";
 export default function SettingsScreen({
   data,
   plantsThisWeek,
+  userEmail,
+  signOut,
   go,
   updateSettings,
 }: ScreenProps) {
@@ -115,6 +117,18 @@ export default function SettingsScreen({
           targets are based on the daily dozen + plant-based guidance. general
           guidance, not medical advice.
         </p>
+
+        <div className="stack stack-2">
+          <label className="text">account</label>
+          {userEmail && (
+            <p className="text-sm muted" style={{ wordBreak: "break-all" }}>
+              signed in as {userEmail}
+            </p>
+          )}
+          <PixelButton variant="ghost" block onClick={signOut}>
+            sign out
+          </PixelButton>
+        </div>
 
         <PixelButton variant="ghost" block onClick={() => go("landing")}>
           back home

@@ -3,8 +3,16 @@ import Screen from "../components/Screen";
 import PixelButton from "../components/PixelButton";
 import PixelGirl from "../components/PixelGirl";
 import { headerLabel, todayKey } from "../lib/dates";
+import { signInWithGoogle } from "../lib/supabase";
 
-export default function Landing({ data, plantsThisWeek, go }: ScreenProps) {
+export default function Landing({
+  data,
+  plantsThisWeek,
+  authed,
+  userEmail,
+  signOut,
+  go,
+}: ScreenProps) {
   const today = todayKey();
 
   return (
@@ -17,7 +25,7 @@ export default function Landing({ data, plantsThisWeek, go }: ScreenProps) {
         <div className="spacer" />
 
         <p className="text-sm">welcome to...</p>
-        <h1 className="title-lg">ASHWINIEAT</h1>
+        <h1 className="title-lg">YUMSHI</h1>
 
         <div className="row" style={{ justifyContent: "center", margin: "6px 0" }}>
           <PixelGirl scale={8} bob />
@@ -26,31 +34,63 @@ export default function Landing({ data, plantsThisWeek, go }: ScreenProps) {
         <p className="text" style={{ letterSpacing: 1 }}>
           {headerLabel(today)}
         </p>
-        <p className="text-sm muted">
-          {plantsThisWeek >= data.settings.weeklyPlantTarget
-            ? "30+ plants — you're thriving!"
-            : `${plantsThisWeek}/${data.settings.weeklyPlantTarget} plants this week`}
-        </p>
 
-        <div className="spacer" />
+        {authed ? (
+          <>
+            <p className="text-sm muted">
+              {plantsThisWeek >= data.settings.weeklyPlantTarget
+                ? "30+ plants — you're thriving!"
+                : `${plantsThisWeek}/${data.settings.weeklyPlantTarget} plants this week`}
+            </p>
 
-        <div className="stack stack-2">
-          <PixelButton
-            variant="primary"
-            block
-            onClick={() => go("log", today)}
-          >
-            enter today's nom noms
-          </PixelButton>
-          <div className="row gap-2" style={{ justifyContent: "center" }}>
-            <PixelButton small variant="ghost" onClick={() => go("weekly")}>
-              this week
-            </PixelButton>
-            <PixelButton small variant="ghost" onClick={() => go("settings")}>
-              options
-            </PixelButton>
-          </div>
-        </div>
+            <div className="spacer" />
+
+            <div className="stack stack-2">
+              <PixelButton variant="primary" block onClick={() => go("log", today)}>
+                enter today's nom noms
+              </PixelButton>
+              <div className="row gap-2" style={{ justifyContent: "center" }}>
+                <PixelButton small variant="ghost" onClick={() => go("weekly")}>
+                  this week
+                </PixelButton>
+                <PixelButton small variant="ghost" onClick={() => go("settings")}>
+                  options
+                </PixelButton>
+              </div>
+            </div>
+
+            <div className="spacer" />
+
+            <p className="text-sm muted" style={{ wordBreak: "break-all" }}>
+              {userEmail}
+            </p>
+            <div className="row" style={{ justifyContent: "center" }}>
+              <PixelButton small variant="ghost" onClick={signOut}>
+                sign out
+              </PixelButton>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="text-sm muted" style={{ lineHeight: 1.8 }}>
+              eat 30+ plants a week, one happy bite at a time. sign in to grow
+              your garden on any device.
+            </p>
+
+            <div className="spacer" />
+
+            <div className="stack stack-2">
+              <PixelButton
+                variant="primary"
+                block
+                onClick={() => void signInWithGoogle()}
+              >
+                sign in with google
+              </PixelButton>
+              <p className="text-sm muted">your noms sync everywhere you log in.</p>
+            </div>
+          </>
+        )}
 
         <div className="spacer" />
       </div>

@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
 import type { AppData, DayLog, LearnedFood, Settings } from "./lib/storage";
-import { getDay, isStorageBroken, loadData, saveData } from "./lib/storage";
+import { EMPTY_DATA, getDay } from "./lib/storage";
+import { fetchAppData, saveAppData } from "./lib/store";
+import { supabase, signOut as supabaseSignOut } from "./lib/supabase";
 import { computeWeeklyProgress } from "./lib/nutrition";
 import { lastNKeys, todayKey } from "./lib/dates";
 import Landing from "./screens/Landing";
@@ -8,6 +11,7 @@ import LogEntry from "./screens/LogEntry";
 import DailyGame from "./screens/DailyGame";
 import Weekly from "./screens/Weekly";
 import SettingsScreen from "./screens/Settings";
+import Screen from "./components/Screen";
 
 export type ScreenName = "landing" | "log" | "game" | "weekly" | "settings";
 
@@ -15,6 +19,10 @@ export interface ScreenProps {
   data: AppData;
   activeDate: string;
   plantsThisWeek: number;
+  // Auth: present (email) when signed in, undefined when signed out.
+  authed: boolean;
+  userEmail?: string;
+  signOut: () => void;
   go: (screen: ScreenName, date?: string) => void;
   updateDay: (date: string, day: DayLog) => void;
   updateSettings: (settings: Settings) => void;
@@ -22,14 +30,50 @@ export interface ScreenProps {
 }
 
 export default function App() {
-  const [data, setData] = useState<AppData>(() => loadData());
+  const [session, setSession] = useState<Session | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [data, setData] = useState<AppData | null>(null);
   const [screen, setScreen] = useState<ScreenName>("landing");
   const [activeDate, setActiveDate] = useState<string>(() => todayKey());
 
-  // Persist on every change.
+  // ---- Auth lifecycle -----------------------------------------------------
   useEffect(() => {
-    saveData(data);
-  }, [data]);
+    supabase.auth.getSession().then(({ data: s }) => {
+      setSession(s.session);
+      setAuthReady(true);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  const userId = session?.user.id;
+
+  // ---- Load this user's data when they sign in ----------------------------
+  useEffect(() => {
+    if (!userId) {
+      setData(null);
+      setScreen("landing");
+      return;
+    }
+    let cancelled = false;
+    fetchAppData(userId).then((d) => {
+      if (!cancelled) setData(d);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  // ---- Persist (debounced) on every change --------------------------------
+  useEffect(() => {
+    if (!userId || !data) return;
+    const t = setTimeout(() => {
+      void saveAppData(userId, data);
+    }, 600);
+    return () => clearTimeout(t);
+  }, [data, userId]);
 
   const go = useCallback((next: ScreenName, date?: string) => {
     if (date) setActiveDate(date);
@@ -37,16 +81,18 @@ export default function App() {
   }, []);
 
   const updateDay = useCallback((date: string, day: DayLog) => {
-    setData((prev) => ({ ...prev, days: { ...prev.days, [date]: day } }));
+    setData((prev) =>
+      prev ? { ...prev, days: { ...prev.days, [date]: day } } : prev
+    );
   }, []);
 
   const updateSettings = useCallback((settings: Settings) => {
-    setData((prev) => ({ ...prev, settings }));
+    setData((prev) => (prev ? { ...prev, settings } : prev));
   }, []);
 
   const addLearned = useCallback((food: LearnedFood) => {
     setData((prev) => {
-      // replace any existing learned entry with the same alias
+      if (!prev) return prev;
       const learned = prev.learned.filter(
         (l) => l.alias.toLowerCase() !== food.alias.toLowerCase()
       );
@@ -55,25 +101,44 @@ export default function App() {
     });
   }, []);
 
+  const signOut = useCallback(() => {
+    void supabaseSignOut();
+  }, []);
+
   // Weekly plant count (rolling 7 days ending today) for the status bar.
   const plantsThisWeek = useMemo(() => {
+    if (!data) return 0;
     const keys = lastNKeys(7);
     const logs = keys.map((k) => data.days[k]);
     return computeWeeklyProgress(logs, keys).plantCount;
-  }, [data.days]);
+  }, [data]);
+
+  // ---- Render gates -------------------------------------------------------
+  // Still checking for an existing session.
+  if (!authReady) return <Splash message="warming up the cartridge…" />;
+
+  // Signed in, but the data row is still loading.
+  if (session && !data) return <Splash message="loading your garden…" />;
+
+  const effectiveData = data ?? EMPTY_DATA;
 
   const shared: ScreenProps = {
-    data,
+    data: effectiveData,
     activeDate,
     plantsThisWeek,
+    authed: !!session,
+    userEmail: session?.user.email ?? undefined,
+    signOut,
     go,
     updateDay,
     updateSettings,
     addLearned,
   };
 
-  // Make sure a fresh DayLog exists in memory for the active date when logging.
-  const activeDay = getDay(data, activeDate);
+  // Signed out → only the landing screen (with the sign-in button) is reachable.
+  if (!session) return <Landing {...shared} />;
+
+  const activeDay = getDay(effectiveData, activeDate);
 
   return (
     <>
@@ -82,12 +147,19 @@ export default function App() {
       {screen === "game" && <DailyGame {...shared} day={activeDay} />}
       {screen === "weekly" && <Weekly {...shared} />}
       {screen === "settings" && <SettingsScreen {...shared} />}
-      {isStorageBroken() && (
-        <div className="toast" role="status">
-          heads up: saving is off (private mode?). your noms stay only for this
-          visit.
-        </div>
-      )}
     </>
+  );
+}
+
+function Splash({ message }: { message: string }) {
+  return (
+    <Screen statusRight={<span className="text-sm">···</span>}>
+      <div
+        className="stack stack-3 text-center"
+        style={{ flex: 1, justifyContent: "center" }}
+      >
+        <p className="text blink">{message}</p>
+      </div>
+    </Screen>
   );
 }
