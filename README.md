@@ -31,18 +31,24 @@ npm run preview  # preview the production build
 
 ## How it works
 
-1. **Landing** — the pixel girl, today's date, and your weekly plant count.
-2. **Log entry** — type foods + quantities (`kale`, `2 cups`). Free-text quantities
-   like `handful`, `1 bowl`, `½ cup` are parsed into target-servings. Unknown foods
-   prompt a one-tap category picker and are remembered for next time.
-3. **Daily game** — the canvas board draws each category's target as pixel-food icons.
-   The girl snakes through, **eating** what you logged and **hopping over** what you
-   missed (left hollow, never punished). A summary shows categories filled/missed,
-   today's plant variety, a soft calorie estimate, and a supplement checklist
-   (D3 / omega-3 / B12 / brazil nut).
-4. **Weekly** — rolling 7-day plant-variety counter (`X / 30`), a pixel heatmap of
-   categories hit per day (tap a day to amend it), and the full list of plants eaten.
-5. **Options** — calorie goal (soft reference), water target, weekly plant target.
+1. **First-run intro** — the "why 30 plants a week?" science card, shown once per user.
+2. **Landing** — the pixel girl, today's date, and your weekly plant points.
+3. **Log entry** — type anything (`kale`, `lentil soup`, `cake`, `chicken and rice`).
+   Each entry is routed locally (no AI) to **plant / dish / treat / animal / refined /
+   unknown**. Dishes show their assumed plant components to confirm/amend; vague
+   entries (`soup`, `curry`, `salad`, `smoothie`) ask a clarifying question; treats
+   "feed the soul" (qualifying plants inside still count); animal foods get a gentle
+   redirect; unknowns get a one-tap category picker that's remembered next time.
+4. **Daily game** — the girl snakes through and **eats** each plant you logged (runs
+   only when a food log is confirmed). The wrap-up celebrates the win first, shows
+   your plant list, category coverage (filled vs quiet — never failing), one or two
+   gentle next steps, and your opted-in supplement ticks.
+5. **Weekly** — rolling 7-day **plant points** (`X / 30`, ¼ pt for herbs/spices/etc.),
+   Bronze/Silver/Gold badges, a pixel day-strip (tap a day to amend), the full variety
+   list, and easy new-plant ideas from your quietest groups.
+6. **Options** — weekly plant target, week window (rolling vs Mon–Sun), and a fully
+   customizable supplement tracker (B12, D, omega-3, iron, iodine, zinc, calcium,
+   selenium, protein + your own). Nothing is forced; supplement ticks never animate.
 
 ## Project structure
 
@@ -51,27 +57,30 @@ src/
   App.tsx                  # state, navigation, persistence
   styles/pixel.css         # palette, font, pixel design system
   data/
-    targets.ts             # Daily-Dozen-based targets + serving/unit definitions
-    foodDatabase.ts        # ~100 foods -> {category, serving, kcal, plant}
+    foodDatabase.ts        # the entire local food-recognition layer (no AI)
+    categories.ts          # 16-category display metadata (labels + icon keys)
   lib/
-    storage.ts             # app data shapes + helpers
+    storage.ts             # app data shapes + helpers (entries, plants, supplements)
     supabase.ts            # Supabase client + Google auth helpers
     store.ts               # fetch/save the user's data (JSONB) via Supabase
-    nutrition.ts           # quantity parsing + day/week progress engine
+    nutrition.ts           # plant-points engine + adequacy nudges + weekly stats
     sprites.ts             # pixel matrices + canvas draw helpers
     dates.ts               # local-date helpers
   components/
     Screen.tsx             # green LCD bezel + status bar
     PixelButton.tsx
     PixelGirl.tsx          # the friendly canvas sprite
+    PixelIcon.tsx          # tiny filled/outline category icon
   screens/
-    Landing / LogEntry / DailyGame / Weekly / Settings
+    Intro / Landing / LogEntry / DailyGame / Weekly / Settings
 ```
 
-## A note on the nutrition targets
+## A note on the nutrition approach
 
-Targets are based on **Dr. Greger's Daily Dozen** and standard whole-food
-plant-based guidance, with ground flax, a daily brazil nut, omega-3, D3, and a B12
-flag added. They're a nutrient-density **floor to aim for**, never a calorie cap or a
-set of rules. This is **general guidance, not personalized medical advice** — a
-registered dietitian can tailor it, and B12 dosing is worth confirming with a doctor.
+The headline metric is **plant variety** — how many different plants you eat across a
+rolling week, toward **30+ plant points** (the American Gut Project guideline). Herbs,
+spices, tea, coffee, cacao, and olive oil count as ¼ point each; refined/juiced forms
+count as 0. There is **no calorie counting and no macro grams** — amounts only feed
+gentle, qualitative "are you getting enough" nudges (fiber, protein, iron + vitamin C,
+greens). No food is ever labelled bad, and treats are always welcome. This is **general
+wellbeing guidance, not medical advice** — and B12 dosing is worth confirming with a doctor.

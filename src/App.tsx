@@ -1,16 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import type { AppData, DayLog, LearnedFood, Settings } from "./lib/storage";
+import type {
+  AppData,
+  DayLog,
+  LearnedFood,
+  Settings,
+  SupplementItem,
+} from "./lib/storage";
 import { EMPTY_DATA, getDay } from "./lib/storage";
 import { fetchAppData, saveAppData } from "./lib/store";
 import { supabase, signOut as supabaseSignOut } from "./lib/supabase";
-import { computeWeeklyProgress } from "./lib/nutrition";
+import { computeWeeklyStats } from "./lib/nutrition";
 import { lastNKeys, todayKey } from "./lib/dates";
 import Landing from "./screens/Landing";
 import LogEntry from "./screens/LogEntry";
 import DailyGame from "./screens/DailyGame";
 import Weekly from "./screens/Weekly";
 import SettingsScreen from "./screens/Settings";
+import Intro from "./screens/Intro";
 import Screen from "./components/Screen";
 
 export type ScreenName = "landing" | "log" | "game" | "weekly" | "settings";
@@ -18,14 +25,14 @@ export type ScreenName = "landing" | "log" | "game" | "weekly" | "settings";
 export interface ScreenProps {
   data: AppData;
   activeDate: string;
-  plantsThisWeek: number;
-  // Auth: present (email) when signed in, undefined when signed out.
+  plantsThisWeek: number; // weekly plant points (rounded), for the status bar
   authed: boolean;
   userEmail?: string;
   signOut: () => void;
   go: (screen: ScreenName, date?: string) => void;
   updateDay: (date: string, day: DayLog) => void;
   updateSettings: (settings: Settings) => void;
+  updateSupplements: (supplements: SupplementItem[]) => void;
   addLearned: (food: LearnedFood) => void;
 }
 
@@ -90,6 +97,10 @@ export default function App() {
     setData((prev) => (prev ? { ...prev, settings } : prev));
   }, []);
 
+  const updateSupplements = useCallback((supplements: SupplementItem[]) => {
+    setData((prev) => (prev ? { ...prev, supplements } : prev));
+  }, []);
+
   const addLearned = useCallback((food: LearnedFood) => {
     setData((prev) => {
       if (!prev) return prev;
@@ -101,23 +112,26 @@ export default function App() {
     });
   }, []);
 
+  const markIntroSeen = useCallback(() => {
+    setData((prev) => (prev ? { ...prev, hasSeenIntro: true } : prev));
+  }, []);
+
   const signOut = useCallback(() => {
     void supabaseSignOut();
   }, []);
 
-  // Weekly plant count (rolling 7 days ending today) for the status bar.
+  // Weekly plant points (rolling 7 days ending today) for the status bar.
   const plantsThisWeek = useMemo(() => {
     if (!data) return 0;
     const keys = lastNKeys(7);
     const logs = keys.map((k) => data.days[k]);
-    return computeWeeklyProgress(logs, keys).plantCount;
+    return Math.round(
+      computeWeeklyStats(logs, keys, data.settings.weeklyPlantTarget).totalPoints
+    );
   }, [data]);
 
   // ---- Render gates -------------------------------------------------------
-  // Still checking for an existing session.
   if (!authReady) return <Splash message="warming up the cartridge…" />;
-
-  // Signed in, but the data row is still loading.
   if (session && !data) return <Splash message="loading your garden…" />;
 
   const effectiveData = data ?? EMPTY_DATA;
@@ -132,11 +146,17 @@ export default function App() {
     go,
     updateDay,
     updateSettings,
+    updateSupplements,
     addLearned,
   };
 
-  // Signed out → only the landing screen (with the sign-in button) is reachable.
+  // Signed out → only the landing screen (with the sign-in button).
   if (!session) return <Landing {...shared} />;
+
+  // First run for this user → the one-time science intro.
+  if (data && !data.hasSeenIntro) {
+    return <Intro {...shared} onContinue={markIntroSeen} />;
+  }
 
   const activeDay = getDay(effectiveData, activeDate);
 

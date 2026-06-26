@@ -647,3 +647,51 @@ a.link {
   text-decoration: underline;
   cursor: pointer;
 }
+
+/* ---- Food chips + draft cards (log review) ------------------------------- */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  line-height: 1.4;
+  border: 2px solid var(--lcd-dark);
+  background: var(--lcd-light);
+  color: var(--lcd-dark);
+  padding: 4px 6px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+.chip:active {
+  background: var(--lcd-dark);
+  color: var(--lcd-bg);
+}
+.chip--static {
+  cursor: default;
+}
+.chip--static:active {
+  background: var(--lcd-light);
+  color: var(--lcd-dark);
+}
+.draft-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---- Category coverage grid (daily wrap-up) ------------------------------ */
+.cov-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 6px;
+  justify-items: center;
+}
+.cov-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

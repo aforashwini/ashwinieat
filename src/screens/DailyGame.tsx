@@ -1,37 +1,33 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ScreenProps } from "../App";
-import type { DayLog, Supplements } from "../lib/storage";
-import { computeDayProgress } from "../lib/nutrition";
-import { TARGETS } from "../data/targets";
-import { headerLabel } from "../lib/dates";
+import type { DayLog } from "../lib/storage";
 import {
-  GIRL_HEAD,
-  ICONS,
-  PALETTE,
-  drawMatrix,
-  drawOutline,
-  type Matrix,
-} from "../lib/sprites";
+  computeDayStats,
+  dailyNudges,
+  dailyWins,
+} from "../lib/nutrition";
+import { ALL_CATEGORIES, CATEGORY_META, categoryIcon } from "../data/categories";
+import { headerLabel } from "../lib/dates";
+import { GIRL_HEAD, ICONS, PALETTE, drawMatrix, type Matrix } from "../lib/sprites";
 import Screen from "../components/Screen";
 import PixelButton from "../components/PixelButton";
+import PixelIcon from "../components/PixelIcon";
 
 interface Props extends ScreenProps {
   day: DayLog;
 }
 
-type SlotKind = "fill" | "bonus" | "miss";
 interface Waypoint {
-  x: number; // icon top-left (virtual px)
+  x: number;
   y: number;
-  kind: SlotKind;
   icon: Matrix;
 }
 
 const CELL = 12;
 const MARGIN = 5;
 const ICON = 8;
-const MAX_BONUS = 3;
-const SPEED = 6; // cells per second
+const COLS = 7;
+const SPEED = 7; // cells per second
 
 export default function DailyGame({
   data,
@@ -41,71 +37,80 @@ export default function DailyGame({
   updateDay,
   day,
 }: Props) {
-  const progress = useMemo(() => computeDayProgress(day), [day]);
+  const stats = useMemo(() => computeDayStats(day), [day]);
 
-  // Build the serpentine board: one lane per category, icons across.
+  // One icon per unique plant eaten today, by its category.
+  const plantCells = useMemo(() => {
+    const cells: { name: string; icon: string }[] = [];
+    const seen = new Set<string>();
+    for (const e of day.entries) {
+      for (const p of e.plants) {
+        const key = p.name.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        cells.push({ name: p.name, icon: categoryIcon(p.category) });
+      }
+    }
+    return cells;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [day]);
+
+  // Stable signature so the animation only (re)runs when the plant set changes
+  // — NOT when supplement toggles change the day object.
+  const boardKey = useMemo(
+    () => `${activeDate}|${plantCells.map((c) => c.name).join(",")}`,
+    [activeDate, plantCells]
+  );
+
+  // Serpentine board geometry.
   const board = useMemo(() => {
     const waypoints: Waypoint[] = [];
-    let maxSlots = 0;
-
-    TARGETS.forEach((t, lane) => {
-      const cp = progress.byCategory[t.category];
-      const eaten = Math.round(cp.servings);
-      const filled = Math.min(eaten, t.target);
-      const bonus = Math.min(Math.max(0, eaten - t.target), MAX_BONUS);
-      const slots = t.target + bonus;
-      maxSlots = Math.max(maxSlots, slots);
-      const icon = ICONS[t.icon] ?? ICONS.bean;
-      const y = MARGIN + lane * CELL;
-      for (let j = 0; j < slots; j++) {
-        let kind: SlotKind;
-        if (j < filled) kind = "fill";
-        else if (j < t.target) kind = "miss";
-        else kind = "bonus";
-        waypoints.push({ x: MARGIN + j * CELL, y, kind, icon });
-      }
+    plantCells.forEach((cell, i) => {
+      const rowIdx = Math.floor(i / COLS);
+      let col = i % COLS;
+      if (rowIdx % 2 === 1) col = COLS - 1 - col; // snake back the other way
+      waypoints.push({
+        x: MARGIN + col * CELL,
+        y: MARGIN + rowIdx * CELL,
+        icon: ICONS[cell.icon] ?? ICONS.leaf,
+      });
     });
-
-    const vw = MARGIN * 2 + maxSlots * CELL;
-    const vh = MARGIN * 2 + TARGETS.length * CELL;
-    const start = { x: MARGIN - CELL, y: MARGIN };
-    return { waypoints, vw, vh, start };
-  }, [progress]);
+    const usedCols = Math.min(plantCells.length, COLS);
+    const rows = Math.max(1, Math.ceil(plantCells.length / COLS));
+    const vw = MARGIN * 2 + Math.max(1, usedCols) * CELL;
+    const vh = MARGIN * 2 + rows * CELL;
+    return { waypoints, vw, vh };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boardKey]);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [finished, setFinished] = useState(false);
+  const [finished, setFinished] = useState(plantCells.length === 0);
 
-  // animation refs
   const pRef = useRef(-1);
   const processedRef = useRef(0);
   const eatenRef = useRef<Set<number>>(new Set());
-  const tailRef = useRef(0);
   const munchRef = useRef<{ x: number; y: number; t: number } | null>(null);
   const rafRef = useRef<number>(0);
   const doneRef = useRef(false);
-
-  const totalFill = useMemo(
-    () => board.waypoints.filter((w) => w.kind !== "miss").length,
-    [board]
-  );
 
   const skip = () => {
     pRef.current = board.waypoints.length - 1;
   };
 
-  // Run the eating animation.
   useEffect(() => {
+    if (board.waypoints.length === 0) {
+      setFinished(true);
+      return;
+    }
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.imageSmoothingEnabled = false;
 
-    // reset state
     pRef.current = -1;
     processedRef.current = 0;
     eatenRef.current = new Set();
-    tailRef.current = 0;
     munchRef.current = null;
     doneRef.current = false;
     setFinished(false);
@@ -115,45 +120,33 @@ export default function DailyGame({
 
     const headCenter = () => {
       const p = pRef.current;
-      if (wps.length === 0) return { cx: board.start.x + ICON / 2, cy: board.start.y + ICON / 2, hop: 0 };
       if (p < 0) {
-        const f = p + 1; // 0..1 sliding in
-        const a = board.start;
+        const f = p + 1;
         const b = wps[0];
-        return {
-          cx: lerp(a.x, b.x, f) + ICON / 2,
-          cy: lerp(a.y, b.y, f) + ICON / 2,
-          hop: 0,
-        };
+        const ax = b.x - CELL;
+        return { cx: ax + (b.x - ax) * f + ICON / 2, cy: b.y + ICON / 2 };
       }
       const i0 = Math.min(Math.floor(p), wps.length - 1);
       const i1 = Math.min(i0 + 1, wps.length - 1);
       const f = p - i0;
       const a = wps[i0];
       const b = wps[i1];
-      // hop arc when approaching a missed icon
-      const hop = b.kind === "miss" && i1 !== i0 ? Math.sin(f * Math.PI) * 7 : 0;
-      return { cx: lerp(a.x, b.x, f) + ICON / 2, cy: lerp(a.y, b.y, f) + ICON / 2, hop };
+      return { cx: lerp(a.x, b.x, f) + ICON / 2, cy: lerp(a.y, b.y, f) + ICON / 2 };
     };
 
     const draw = () => {
-      // background
       ctx.fillStyle = PALETTE.bg;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // slots
       wps.forEach((w, idx) => {
-        if (w.kind === "miss") {
-          drawOutline(ctx, w.icon, w.x, w.y, 1, PALETTE.mid);
-        } else if (!eatenRef.current.has(idx)) {
-          drawMatrix(ctx, w.icon, w.x, w.y, 1, w.kind === "bonus" ? PALETTE.mid : PALETTE.dark);
+        if (!eatenRef.current.has(idx)) {
+          drawMatrix(ctx, w.icon, w.x, w.y, 1, PALETTE.dark);
         }
       });
 
-      // tail (trailing body squares along visited waypoints)
+      // tail behind the head
       const i0 = Math.max(0, Math.min(Math.floor(pRef.current), wps.length - 1));
-      const tail = tailRef.current;
-      for (let k = 1; k <= tail; k++) {
+      for (let k = 1; k <= 3; k++) {
         const idx = i0 - k;
         if (idx < 0) break;
         const w = wps[idx];
@@ -163,11 +156,9 @@ export default function DailyGame({
         ctx.fillRect(w.x + 2, w.y + 2, ICON - 4, ICON - 4);
       }
 
-      // head
-      const { cx, cy, hop } = headCenter();
-      drawMatrix(ctx, GIRL_HEAD, Math.round(cx - ICON / 2), Math.round(cy - ICON / 2 - hop), 1, PALETTE.dark);
+      const { cx, cy } = headCenter();
+      drawMatrix(ctx, GIRL_HEAD, Math.round(cx - ICON / 2), Math.round(cy - ICON / 2), 1, PALETTE.dark);
 
-      // munch sparkle
       const m = munchRef.current;
       if (m && performance.now() - m.t < 220) {
         const age = (performance.now() - m.t) / 220;
@@ -189,15 +180,11 @@ export default function DailyGame({
         const end = wps.length - 1;
         if (pRef.current >= end) pRef.current = end;
 
-        // process arrivals
         while (processedRef.current <= Math.floor(pRef.current) && processedRef.current < wps.length) {
           const idx = processedRef.current;
           const w = wps[idx];
-          if (w.kind !== "miss") {
-            eatenRef.current.add(idx);
-            tailRef.current += 1;
-            munchRef.current = { x: w.x + ICON / 2, y: w.y + ICON / 2, t: performance.now() };
-          }
+          eatenRef.current.add(idx);
+          munchRef.current = { x: w.x + ICON / 2, y: w.y + ICON / 2, t: performance.now() };
           processedRef.current += 1;
         }
 
@@ -209,7 +196,6 @@ export default function DailyGame({
       draw();
 
       if (doneRef.current) {
-        // settle one more frame then show summary
         window.setTimeout(() => setFinished(true), 350);
         return;
       }
@@ -218,19 +204,21 @@ export default function DailyGame({
 
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [board, totalFill, activeDate]);
+  }, [board, boardKey]);
 
-  // ---- supplement toggles ----
-  const setSupp = (key: keyof Supplements) => {
+  // ---- supplement toggles (NEVER trigger the animation) ----
+  const enabledSupps = data.supplements.filter((s) => s.enabled);
+  const toggleSupp = (id: string) => {
     const next: DayLog = {
       ...day,
-      supplements: { ...day.supplements, [key]: !day.supplements[key] },
+      supplementsTaken: { ...day.supplementsTaken, [id]: !day.supplementsTaken[id] },
     };
     updateDay(activeDate, next);
   };
 
-  const plantsToday = progress.plants.size;
-  const headline = pickHeadline(progress.categoriesMet, progress.totalCategories, day.foods.length);
+  const wins = dailyWins(stats);
+  const nudges = dailyNudges(stats);
+  const headline = pickHeadline(stats.plantCount);
 
   return (
     <Screen
@@ -241,100 +229,106 @@ export default function DailyGame({
       <div className="stack stack-3" style={{ flex: 1 }}>
         <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
           <h2 className="title-md">{finished ? "your feast!" : "munching…"}</h2>
-          {!finished && (
+          {!finished && plantCells.length > 0 && (
             <PixelButton small variant="ghost" onClick={skip}>
               skip »
             </PixelButton>
           )}
         </div>
 
-        <canvas
-          ref={canvasRef}
-          width={board.vw}
-          height={board.vh}
-          className="game-canvas"
-          style={{ maxHeight: 260, objectFit: "contain" }}
-        />
-
-        {day.foods.length === 0 && (
-          <p className="text-sm text-center muted">
-            nothing logged yet — let's get munching!
-          </p>
+        {plantCells.length > 0 && (
+          <canvas
+            ref={canvasRef}
+            width={board.vw}
+            height={board.vh}
+            className="game-canvas"
+            style={{ maxHeight: 220, objectFit: "contain" }}
+          />
         )}
 
         {finished && (
           <div className="stack stack-3">
             <p className="text text-center">{headline}</p>
 
-            {/* category results */}
-            <div className="panel panel--inset stack stack-2">
-              {TARGETS.map((t) => {
-                const cp = progress.byCategory[t.category];
-                const eaten = Math.round(cp.servings);
-                return (
-                  <div className="cat-row" key={t.category}>
-                    <span className="cat-row__name">
-                      {cp.met ? "✓ " : "· "}
-                      {t.label}
-                    </span>
-                    <span className="cat-row__pips">
-                      {Array.from({ length: t.target }).map((_, j) => (
-                        <span
-                          key={j}
-                          className={`pip ${j < Math.min(eaten, t.target) ? "is-filled" : ""}`}
-                        />
-                      ))}
-                      {Array.from({ length: Math.min(Math.max(0, eaten - t.target), MAX_BONUS) }).map(
-                        (_, j) => (
-                          <span key={`b${j}`} className="pip is-bonus" />
-                        )
-                      )}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* plant variety + calories */}
-            <div className="panel stack stack-2">
-              <p className="text">
-                plants today: <b>{plantsToday}</b>
-              </p>
-              <p className="text-sm muted">
-                week so far: {plantsThisWeek}/{data.settings.weeklyPlantTarget} plants
-              </p>
-              <hr className="divider" />
-              <p className="text-sm">
-                ~{progress.kcal} kcal so far{" "}
-                <span className="muted">(goal {data.settings.calorieGoal})</span>
-              </p>
-              {progress.brazilNutCount > 1 && (
-                <p className="text-sm muted">
-                  psst: 1 brazil nut a day is plenty for selenium 🌰
+            {/* plant list */}
+            {stats.plantCount > 0 ? (
+              <div className="panel stack stack-2">
+                <p className="text">
+                  <b>{stats.plantCount}</b> different plant{stats.plantCount === 1 ? "" : "s"} today
+                  {stats.pointsToday !== stats.plantCount && (
+                    <span className="muted"> · {round1(stats.pointsToday)} pts</span>
+                  )}
                 </p>
-              )}
+                <div className="chips">
+                  {stats.uniquePlants.map((p) => (
+                    <span key={p} className="chip chip--static">{p}</span>
+                  ))}
+                </div>
+                <p className="text-sm muted">
+                  week so far: {plantsThisWeek}/{data.settings.weeklyPlantTarget} plant points
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-center muted">
+                no plants logged this time — that's okay! every day is a fresh start. 🌱
+              </p>
+            )}
+
+            {/* category coverage (filled vs quiet, never failing) */}
+            <div className="panel panel--inset stack stack-2">
+              <p className="text-sm muted">groups you touched today</p>
+              <div className="cov-grid">
+                {ALL_CATEGORIES.map((c) => (
+                  <div className="cov-cell" key={c} title={CATEGORY_META[c].label}>
+                    <PixelIcon
+                      icon={categoryIcon(c)}
+                      filled={stats.categoriesTouched.has(c)}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
 
-            {/* supplements checklist */}
+            {/* wins + gentle nudges */}
+            {(wins.length > 0 || nudges.length > 0) && (
+              <div className="panel stack stack-2">
+                {wins.slice(0, 2).map((w, i) => (
+                  <p key={`w${i}`} className="text-sm">✓ {w}</p>
+                ))}
+                {nudges.map((n, i) => (
+                  <p key={`n${i}`} className="text-sm muted">→ {n}</p>
+                ))}
+              </div>
+            )}
+
+            {/* soul food acknowledgement */}
+            {stats.soulNotes.map((note, i) => (
+              <p key={`s${i}`} className="text-sm text-center">{note}</p>
+            ))}
+
+            {/* supplements — toggles never animate */}
             <div className="panel stack stack-2">
-              <p className="text-sm muted">daily supplements</p>
-              <SuppRow label="vitamin d3" on={day.supplements.d3} onClick={() => setSupp("d3")} />
-              <SuppRow
-                label="omega-3 (algal)"
-                on={day.supplements.omega3}
-                onClick={() => setSupp("omega3")}
-              />
-              <SuppRow
-                label="vitamin b12"
-                on={day.supplements.b12}
-                onClick={() => setSupp("b12")}
-                note="~50mcg daily — confirm dosing w/ a doctor"
-              />
-              <SuppRow
-                label="brazil nut (1)"
-                on={day.supplements.brazilNut}
-                onClick={() => setSupp("brazilNut")}
-              />
+              <p className="text-sm muted">today's supplements</p>
+              {enabledSupps.length === 0 ? (
+                <p className="text-sm muted">
+                  none picked yet — choose any you like in options.
+                </p>
+              ) : (
+                enabledSupps.map((s) => (
+                  <div
+                    key={s.id}
+                    className="check-row"
+                    onClick={() => toggleSupp(s.id)}
+                    role="checkbox"
+                    aria-checked={!!day.supplementsTaken[s.id]}
+                  >
+                    <span className={`check-box ${day.supplementsTaken[s.id] ? "is-on" : ""}`}>
+                      {day.supplementsTaken[s.id] ? "✓" : ""}
+                    </span>
+                    <span>{s.label}</span>
+                  </div>
+                ))
+              )}
             </div>
 
             <div className="stack stack-2">
@@ -343,13 +337,17 @@ export default function DailyGame({
                   see weekly
                 </PixelButton>
                 <PixelButton block onClick={() => go("log", activeDate)}>
-                  amend
+                  add more
                 </PixelButton>
               </div>
               <PixelButton small variant="ghost" onClick={() => go("landing")}>
                 home
               </PixelButton>
             </div>
+
+            <p className="text-sm muted text-center" style={{ lineHeight: 1.7 }}>
+              general wellbeing guidance, not medical advice.
+            </p>
           </div>
         )}
       </div>
@@ -357,37 +355,17 @@ export default function DailyGame({
   );
 }
 
-function SuppRow({
-  label,
-  on,
-  onClick,
-  note,
-}: {
-  label: string;
-  on: boolean;
-  onClick: () => void;
-  note?: string;
-}) {
-  return (
-    <div>
-      <div className="check-row" onClick={onClick} role="checkbox" aria-checked={on}>
-        <span className={`check-box ${on ? "is-on" : ""}`}>{on ? "✓" : ""}</span>
-        <span>{label}</span>
-      </div>
-      {note && <p className="text-sm muted" style={{ paddingLeft: 24 }}>{note}</p>}
-    </div>
-  );
-}
-
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
 
-function pickHeadline(met: number, total: number, foodCount: number): string {
-  if (foodCount === 0) return "nothing logged yet — tap amend to add noms!";
-  if (met >= total) return "WOW. every category filled. legend! 🌟";
-  if (met >= total - 2) return "great munching today! so close to a full board!";
-  if (met >= total / 2) return "nice noms! a few gaps to fill — you got this.";
-  if (met > 0) return "good start! plenty more plants to munch.";
-  return "let's get those plants in — every nom counts!";
+function pickHeadline(plants: number): string {
+  if (plants === 0) return "logged! tap add more whenever you eat. 🌱";
+  if (plants >= 10) return "WOW — what a colourful day! 🌈";
+  if (plants >= 6) return "great munching today! lovely variety.";
+  if (plants >= 3) return "nice noms! your plants are adding up.";
+  return "good start — every plant is a win!";
 }
