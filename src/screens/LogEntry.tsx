@@ -5,6 +5,7 @@ import type { Category } from "../data/foodDatabase";
 import {
   findWholeFood,
   getPoints,
+  quantityToServings,
   resolveEntry,
 } from "../data/foodDatabase";
 import { CATEGORIES, categoryLabel } from "../data/categories";
@@ -18,6 +19,7 @@ interface Props extends ScreenProps {
 
 interface Row {
   raw: string;
+  quantity: string;
 }
 
 interface Chip {
@@ -64,9 +66,10 @@ function chipFromComponent(
   return { name, category, points: getPoints(name, category), servings, assumed, fromDish };
 }
 
-// Build a draft card from a single typed row.
-function buildDraft(raw: string): Draft {
+// Build a draft card from a single typed row (food + free-text quantity).
+function buildDraft(raw: string, quantity: string): Draft {
   const res = resolveEntry(raw);
+  const servings = quantityToServings(quantity);
   const base = { id: draftSeq++, raw, chips: [] as Chip[], refined: [] as string[], addText: "" };
 
   switch (res.type) {
@@ -75,7 +78,7 @@ function buildDraft(raw: string): Draft {
         ...base,
         kind: "plant",
         title: res.food.name,
-        chips: [chipFromComponent(res.food.name, res.food.category, false, undefined, res.qty || 1)],
+        chips: [chipFromComponent(res.food.name, res.food.category, false, undefined, servings)],
       };
     case "dish": {
       if (res.dish.needsClarify) {
@@ -140,14 +143,14 @@ export default function LogEntry({
   day,
 }: Props) {
   const [phase, setPhase] = useState<"input" | "review">("input");
-  const [rows, setRows] = useState<Row[]>([{ raw: "" }]);
+  const [rows, setRows] = useState<Row[]>([{ raw: "", quantity: "" }]);
   const [drafts, setDrafts] = useState<Draft[]>([]);
 
   const existingCount = day.entries.length;
 
-  const setRow = (i: number, raw: string) =>
-    setRows((prev) => prev.map((r, idx) => (idx === i ? { raw } : r)));
-  const addRow = () => setRows((prev) => [...prev, { raw: "" }]);
+  const setRow = (i: number, patch: Partial<Row>) =>
+    setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  const addRow = () => setRows((prev) => [...prev, { raw: "", quantity: "" }]);
   const removeRow = (i: number) =>
     setRows((prev) => (prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i)));
 
@@ -174,7 +177,7 @@ export default function LogEntry({
   const goReview = () => {
     const filled = rows.filter((r) => r.raw.trim());
     if (filled.length === 0) return;
-    setDrafts(filled.map((r) => buildDraft(r.raw.trim())));
+    setDrafts(filled.map((r) => buildDraft(r.raw.trim(), r.quantity)));
     setPhase("review");
   };
 
@@ -281,16 +284,32 @@ export default function LogEntry({
               </p>
             )}
 
+            <div className="log-head">
+              <span>FOOD</span>
+              <span>QTY</span>
+              <span />
+            </div>
+
             <div className="stack stack-2">
               {rows.map((row, i) => (
                 <div key={i} className="stack">
-                  <div className="log-row">
+                  <div className="log-row log-row--qty">
                     <input
                       className="pixel-input"
                       placeholder="e.g. kale, lentil soup, cake…"
                       value={row.raw}
                       autoFocus={i === rows.length - 1}
-                      onChange={(e) => setRow(i, e.target.value)}
+                      onChange={(e) => setRow(i, { raw: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && i === rows.length - 1 && row.raw.trim())
+                          addRow();
+                      }}
+                    />
+                    <input
+                      className="pixel-input"
+                      placeholder="1 cup, 2, 10g…"
+                      value={row.quantity}
+                      onChange={(e) => setRow(i, { quantity: e.target.value })}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && i === rows.length - 1 && row.raw.trim())
                           addRow();

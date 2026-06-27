@@ -774,32 +774,129 @@ export const ANIMAL_FOODS = new Set<string>([
 // ============================================================================
 // HELPERS
 // ============================================================================
-export function normalize(input: string): { qty: number; food: string } {
+
+// Spelled-out / loose number words.
+const WORD_NUM: Record<string, number> = {
+  a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7,
+  eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, half: 0.5, quarter: 0.25,
+  couple: 2, few: 3, several: 3, dozen: 12,
+};
+
+const UNICODE_FRACTIONS: Record<string, number> = {
+  "½": 0.5, "¼": 0.25, "¾": 0.75, "⅓": 1 / 3, "⅔": 2 / 3,
+  "⅕": 0.2, "⅛": 0.125, "⅜": 0.375,
+};
+
+// Convert any popular unit token (singular, plural, or abbreviation) into a
+// rough "servings" multiplier. Amounts are only used for gentle adequacy reads,
+// never calories — so weight/volume conversions are intentionally forgiving.
+export function unitMultiplier(raw: string): number | undefined {
+  const u = raw.toLowerCase().replace(/\.$/, "");
+  // try the token, then a de-pluralized form ("cups" -> "cup", "berries" -> "berry")
+  const candidates = [u];
+  if (u.endsWith("ies")) candidates.push(u.slice(0, -3) + "y");
+  if (u.endsWith("es")) candidates.push(u.slice(0, -2));
+  if (u.endsWith("s")) candidates.push(u.slice(0, -1));
+
+  const table: Record<string, number> = {
+    // count-ish / kitchen measures
+    pinch: 0.25, dash: 0.25, tsp: 0.5, teaspoon: 0.5, t: 0.5,
+    tbsp: 1, tbs: 1, tablespoon: 1, handful: 1, piece: 1, slice: 1,
+    small: 0.75, medium: 1, large: 1.5, cup: 1, c: 1, mug: 1,
+    bowl: 1.5, plate: 2, glass: 1, can: 2, tin: 2, jar: 2, bunch: 2,
+    clove: 0.1, stalk: 0.5, stick: 0.5, sprig: 0.25, scoop: 0.5,
+    head: 2, fillet: 1, floret: 0.2, leaf: 0.1, wedge: 0.5, serving: 1,
+    portion: 1, packet: 1.5, bag: 2, box: 2, square: 0.2, ball: 1,
+    // weight (≈ 1 produce serving ~ 80 g)
+    g: 1 / 80, gram: 1 / 80, gramme: 1 / 80, kg: 1000 / 80, kilo: 1000 / 80,
+    kilogram: 1000 / 80, mg: 0, oz: 1 / 3, ounce: 1 / 3, lb: 5, pound: 5,
+    // volume (cup ≈ 240 ml)
+    ml: 1 / 240, milliliter: 1 / 240, millilitre: 1 / 240, cl: 10 / 240,
+    dl: 100 / 240, l: 1000 / 240, litre: 1000 / 240, liter: 1000 / 240,
+    pint: 2, quart: 4,
+  };
+
+  for (const cand of candidates) {
+    if (table[cand] !== undefined) return table[cand];
+  }
+  return undefined;
+}
+
+// Parse a leading quantity (number word/fraction/decimal) + optional unit from
+// the front of a string. Returns the servings multiplier and the remaining text.
+function parseLeadingQuantity(input: string): { qty: number; rest: string; matched: boolean } {
   let s = input.toLowerCase().trim();
-  // pull a leading number (incl simple fractions like 1/2)
   let qty = 1;
-  const m = s.match(/^(\d+(?:\.\d+)?|\d+\/\d+)\s+/);
+  let matched = false;
+
+  // "1 1/2" or "1 ½"
+  let m = s.match(/^(\d+)\s*[ ]\s*(\d+)\s*\/\s*(\d+)\b\s*/);
   if (m) {
-    qty = m[1].includes("/") ? eval(m[1]) : parseFloat(m[1]);
-    s = s.slice(m[0].length);
+    qty = parseInt(m[1], 10) + parseInt(m[2], 10) / parseInt(m[3], 10);
+    matched = true; s = s.slice(m[0].length);
+  } else if ((m = s.match(/^(\d+)\s*([½¼¾⅓⅔⅕⅛⅜])\s*/))) {
+    qty = parseInt(m[1], 10) + (UNICODE_FRACTIONS[m[2]] ?? 0);
+    matched = true; s = s.slice(m[0].length);
+  } else if ((m = s.match(/^([½¼¾⅓⅔⅕⅛⅜])\s*/))) {
+    qty = UNICODE_FRACTIONS[m[1]] ?? 1; matched = true; s = s.slice(m[0].length);
+  } else if ((m = s.match(/^(\d+)\s*\/\s*(\d+)\b\s*/))) {
+    qty = parseInt(m[1], 10) / parseInt(m[2], 10); matched = true; s = s.slice(m[0].length);
+  } else if ((m = s.match(/^(\d+(?:\.\d+)?)\s*/))) {
+    qty = parseFloat(m[1]); matched = true; s = s.slice(m[0].length);
+  } else if ((m = s.match(/^([a-z]+)\b\s*/)) && WORD_NUM[m[1]] !== undefined) {
+    qty = WORD_NUM[m[1]]; matched = true; s = s.slice(m[0].length);
   }
-  // strip a unit word if present, applying its serving multiplier
-  const unitMatch = s.match(/^(\w+)\s+(?:of\s+)?/);
-  if (unitMatch && UNIT_MAP[unitMatch[1]] !== undefined) {
-    qty = qty * UNIT_MAP[unitMatch[1]];
-    s = s.replace(/^(\w+)\s+(?:of\s+)?/, "");
+
+  // optional unit token, possibly followed by "of"
+  const um = s.match(/^([a-zµ]+)\.?\s*(?:of\s+)?/);
+  if (um) {
+    const mult = unitMultiplier(um[1]);
+    if (mult !== undefined) {
+      qty *= mult; matched = true;
+      s = s.slice(um[0].length);
+    }
   }
-  s = s.replace(/^(a|an|some|the)\s+/, "").trim();
-  // naive singularization for matching (keep both forms when looking up)
-  return { qty, food: s };
+
+  s = s.replace(/^(of|a|an|some|the)\s+/, "").trim();
+  return { qty: qty || 1, rest: s, matched };
+}
+
+export function normalize(input: string): { qty: number; food: string } {
+  const { qty, rest } = parseLeadingQuantity(input);
+  return { qty, food: rest };
+}
+
+// Turn a free-text quantity field ("2", "1 cup", "10g", "a handful", "200ml")
+// into a forgiving servings number. Empty / unrecognized -> 1.
+export function quantityToServings(text: string): number {
+  if (!text || !text.trim()) return 1;
+  const t = text.trim().toLowerCase();
+  const { qty, matched } = parseLeadingQuantity(t);
+  if (matched) return Math.max(0, round2(qty));
+  // a bare unit with no number, e.g. "cup" or "handful"
+  const mult = unitMultiplier(t.replace(/^of\s+/, ""));
+  if (mult !== undefined) return Math.max(0, round2(mult));
+  return 1;
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+// Candidate singular forms for naive plural matching.
+function singularForms(food: string): string[] {
+  const forms = [food];
+  if (food.endsWith("ies")) forms.push(food.slice(0, -3) + "y");
+  if (food.endsWith("es")) forms.push(food.slice(0, -2));
+  if (food.endsWith("s")) forms.push(food.slice(0, -1));
+  return forms;
 }
 
 export function findWholeFood(food: string): WholeFood | undefined {
-  const singular = food.endsWith("s") ? food.slice(0, -1) : food;
+  const forms = singularForms(food);
+  const hit = (val: string) => forms.includes(val);
   return WHOLE_FOODS.find(
-    (f) =>
-      f.name === food || f.name === singular ||
-      (f.aliases || []).some((a) => a === food || a === singular)
+    (f) => hit(f.name) || (f.aliases || []).some((a) => hit(a))
   );
 }
 

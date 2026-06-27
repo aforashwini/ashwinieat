@@ -544,9 +544,12 @@ p {
 
 .log-row {
   display: grid;
-  grid-template-columns: 1fr 88px 26px;
+  grid-template-columns: 1fr 26px;
   gap: 6px;
   align-items: center;
+}
+.log-row--qty {
+  grid-template-columns: 1fr 88px 26px;
 }
 .log-head {
   display: grid;

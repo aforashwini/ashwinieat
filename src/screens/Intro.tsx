@@ -24,16 +24,16 @@ export default function Intro({ plantsThisWeek, data, onContinue }: Props) {
 
         <div className="panel stack stack-2">
           <p className="text-sm" style={{ lineHeight: 1.9 }}>
-            A huge study of over 10,000 people (the American Gut Project) found
-            that people eating <b>30+ different plants a week</b> had the most
-            diverse gut microbiomes — far more than people eating 10 or fewer.
+            Eating <b>30+ different plants a week</b> is linked to a healthier,
+            more diverse gut — which supports digestion, immunity, and overall
+            long-term health.
           </p>
           <p className="text-sm" style={{ lineHeight: 1.9 }}>
-            A more diverse gut is <b>linked to</b> better digestion, a stronger
-            immune system, lower inflammation, and even better mood.
+            Yumshi isn't about restriction or what else is on your plate. It
+            counts for everyone — it's simply about eating <b>enough good plant
+            food</b> to feel great for years to come.
           </p>
           <p className="text-sm" style={{ lineHeight: 1.9 }}>
-            The best part: it counts for everyone, whether or not you eat meat.
             It's about <b>variety, not perfection</b>. Every new plant is a win.
           </p>
         </div>
