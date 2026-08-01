@@ -1,9 +1,10 @@
+import { useEffect, useState } from "react";
 import type { ScreenProps } from "../App";
 import Screen from "../components/Screen";
 import PixelButton from "../components/PixelButton";
 import PixelGirl from "../components/PixelGirl";
 import { headerLabel, todayKey } from "../lib/dates";
-import { signInWithGoogle } from "../lib/supabase";
+import { readOAuthError, signInWithGoogle } from "../lib/supabase";
 
 export default function Landing({
   data,
@@ -14,6 +15,18 @@ export default function Landing({
   go,
 }: ScreenProps) {
   const today = todayKey();
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  // Show any error the OAuth provider bounced back with in the URL.
+  useEffect(() => {
+    setAuthError(readOAuthError());
+  }, []);
+
+  const handleSignIn = async () => {
+    setAuthError(null);
+    const err = await signInWithGoogle();
+    if (err) setAuthError(err);
+  };
 
   return (
     <Screen
@@ -80,14 +93,18 @@ export default function Landing({
             <div className="spacer" />
 
             <div className="stack stack-2">
-              <PixelButton
-                variant="primary"
-                block
-                onClick={() => void signInWithGoogle()}
-              >
+              <PixelButton variant="primary" block onClick={() => void handleSignIn()}>
                 sign in with google
               </PixelButton>
               <p className="text-sm muted">your noms sync everywhere you log in.</p>
+              {authError && (
+                <div className="panel panel--inset stack stack-2">
+                  <p className="text-sm">couldn't sign in:</p>
+                  <p className="text-sm muted" style={{ lineHeight: 1.7 }}>
+                    {authError}
+                  </p>
+                </div>
+              )}
             </div>
           </>
         )}

@@ -20,24 +20,46 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     persistSession: true, // keep the user signed in across refreshes
     autoRefreshToken: true,
     detectSessionInUrl: true, // handle the OAuth redirect (?code=...) on return
+    flowType: "pkce",
   },
 });
 
 // Where Google should send the user back to after sign-in. This resolves to
 // http://localhost:3000/ashwinieat/ in dev and
 // https://aforashwini.github.io/ashwinieat/ in production, because BASE_URL is
-// the Vite `base` ("/ashwinieat/").
+// the Vite `base` ("/ashwinieat/"). This exact URL must be in Supabase →
+// Authentication → URL Configuration → Redirect URLs.
 export function authRedirectTo(): string {
   return `${window.location.origin}${import.meta.env.BASE_URL}`;
 }
 
-export async function signInWithGoogle(): Promise<void> {
-  await supabase.auth.signInWithOAuth({
+// Returns an error message string on failure, or null on success (navigation
+// to Google is about to happen). Surfacing this stops the button looking dead.
+export async function signInWithGoogle(): Promise<string | null> {
+  const { error } = await supabase.auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo: authRedirectTo() },
+    options: {
+      redirectTo: authRedirectTo(),
+      queryParams: { prompt: "select_account" },
+    },
   });
+  return error ? error.message : null;
 }
 
 export async function signOut(): Promise<void> {
   await supabase.auth.signOut();
+}
+
+// If the OAuth provider bounced us back with an error (bad redirect config,
+// user cancelled, etc.), Supabase leaves it in the URL query or hash. Read it
+// so we can show the real reason instead of a silent failure.
+export function readOAuthError(): string | null {
+  if (typeof window === "undefined") return null;
+  const parse = (s: string) => new URLSearchParams(s.replace(/^[?#]/, ""));
+  for (const src of [window.location.search, window.location.hash]) {
+    const p = parse(src);
+    const desc = p.get("error_description") || p.get("error");
+    if (desc) return decodeURIComponent(desc.replace(/\+/g, " "));
+  }
+  return null;
 }
