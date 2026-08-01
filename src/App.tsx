@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import type {
   AppData,
@@ -42,6 +42,12 @@ export default function App() {
   const [data, setData] = useState<AppData | null>(null);
   const [screen, setScreen] = useState<ScreenName>("landing");
   const [activeDate, setActiveDate] = useState<string>(() => todayKey());
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  // Keep the freshest data/userId reachable for flush-before-signout.
+  const dataRef = useRef<AppData | null>(null);
+  const userIdRef = useRef<string | undefined>(undefined);
+  const loadedRef = useRef(false); // don't echo the just-fetched blob back
 
   // ---- Auth lifecycle -----------------------------------------------------
   useEffect(() => {
@@ -57,28 +63,41 @@ export default function App() {
 
   const userId = session?.user.id;
 
+  // Keep refs current so a sign-out can flush the very latest data.
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+  useEffect(() => {
+    userIdRef.current = userId;
+  }, [userId]);
+
   // ---- Load this user's data when they sign in ----------------------------
   useEffect(() => {
     if (!userId) {
       setData(null);
       setScreen("landing");
+      loadedRef.current = false;
       return;
     }
     let cancelled = false;
+    loadedRef.current = false;
     fetchAppData(userId).then((d) => {
-      if (!cancelled) setData(d);
+      if (cancelled) return;
+      setData(d);
+      // mark loaded on the next tick so the load itself isn't saved back
+      setTimeout(() => (loadedRef.current = true), 0);
     });
     return () => {
       cancelled = true;
     };
   }, [userId]);
 
-  // ---- Persist (debounced) on every change --------------------------------
+  // ---- Persist (debounced) on every real change ---------------------------
   useEffect(() => {
-    if (!userId || !data) return;
+    if (!userId || !data || !loadedRef.current) return;
     const t = setTimeout(() => {
-      void saveAppData(userId, data);
-    }, 600);
+      void saveAppData(userId, data).then((err) => setSyncError(err));
+    }, 500);
     return () => clearTimeout(t);
   }, [data, userId]);
 
@@ -116,8 +135,19 @@ export default function App() {
     setData((prev) => (prev ? { ...prev, hasSeenIntro: true } : prev));
   }, []);
 
-  const signOut = useCallback(() => {
-    void supabaseSignOut();
+  const signOut = useCallback(async () => {
+    // Flush the freshest data before the session goes away.
+    const uid = userIdRef.current;
+    const d = dataRef.current;
+    if (uid && d) {
+      const err = await saveAppData(uid, d);
+      if (err) {
+        setSyncError(err);
+        // don't sign out on a failed save — the user would lose the data
+        return;
+      }
+    }
+    await supabaseSignOut();
   }, []);
 
   // Weekly plant points (rolling 7 days ending today) for the status bar.
@@ -167,6 +197,11 @@ export default function App() {
       {screen === "game" && <DailyGame {...shared} day={activeDay} />}
       {screen === "weekly" && <Weekly {...shared} />}
       {screen === "settings" && <SettingsScreen {...shared} />}
+      {syncError && (
+        <div className="toast" role="status">
+          couldn't save to the cloud — is the database set up? ({syncError})
+        </div>
+      )}
     </>
   );
 }

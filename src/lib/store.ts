@@ -26,8 +26,9 @@ export async function fetchAppData(userId: string): Promise<AppData> {
   return normalizeData(data.data as Partial<AppData>);
 }
 
-// Upsert the whole blob for this user.
-export async function saveAppData(userId: string, appData: AppData): Promise<void> {
+// Upsert the whole blob for this user. Returns an error message on failure so
+// the UI can surface it (e.g. the user_data table/policies aren't set up).
+export async function saveAppData(userId: string, appData: AppData): Promise<string | null> {
   const { error } = await supabase.from(TABLE).upsert(
     {
       user_id: userId,
@@ -36,5 +37,9 @@ export async function saveAppData(userId: string, appData: AppData): Promise<voi
     },
     { onConflict: "user_id" }
   );
-  if (error) console.error("[store] save failed:", error.message);
+  if (error) {
+    console.error("[store] save failed:", error.message);
+    return error.message;
+  }
+  return null;
 }
